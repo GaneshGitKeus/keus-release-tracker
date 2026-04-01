@@ -25,6 +25,9 @@ let client;
 let db;
 
 async function connectMongo() {
+    console.log('[MongoDB] Attempting to connect...');
+    console.log('[MongoDB] URI (masked):', MONGO_URI.replace(/:([^@]+)@/, ':****@'));
+    console.log('[MongoDB] DB:', DB_NAME, '| Collection:', COLLECTION);
     client = new MongoClient(MONGO_URI, {
         serverSelectionTimeoutMS: 10000,
         socketTimeoutMS: 30000,
@@ -33,14 +36,14 @@ async function connectMongo() {
     db = client.db(DB_NAME);
 
     client.on('error', err => {
-        console.error('MongoDB client error:', err.message);
+        console.error('[MongoDB] Client error:', err.message);
     });
     client.on('close', () => {
-        console.warn('MongoDB connection closed — will reconnect on next request');
+        console.warn('[MongoDB] Connection closed — will reconnect on next request');
         db = null;
     });
 
-    console.log('Connected to MongoDB Atlas');
+    console.log('[MongoDB] Connected successfully');
 }
 
 async function getDb() {
@@ -96,39 +99,51 @@ const server = http.createServer(async (req, res) => {
 
     // POST /save — write all data to MongoDB
     if (req.method === 'POST' && req.url === '/save') {
+        console.log('[POST /save] Request received');
         let body;
         try {
             body = await readBody(req);
+            console.log('[POST /save] Body size:', body.length, 'bytes');
         } catch (e) {
+            console.error('[POST /save] Body read error:', e.message);
             return send(res, 413, { ok: false, error: e.message });
         }
         try {
             const parsed = JSON.parse(body);
+            console.log('[POST /save] JSON parsed OK, getting DB...');
             const col = (await getDb()).collection(COLLECTION);
-            await col.replaceOne(
+            console.log('[POST /save] Running replaceOne upsert...');
+            const result = await col.replaceOne(
                 { _id: DOC_ID },
                 { _id: DOC_ID, ...parsed },
                 { upsert: true }
             );
+            console.log('[POST /save] Success — matched:', result.matchedCount, '| modified:', result.modifiedCount, '| upserted:', result.upsertedCount);
             return send(res, 200, { ok: true });
         } catch (e) {
-            console.error('Save error:', e.message);
+            console.error('[POST /save] Error:', e.message);
+            console.error('[POST /save] Stack:', e.stack);
             return send(res, e instanceof SyntaxError ? 400 : 500, { ok: false, error: e.message });
         }
     }
 
     // GET /data — load from MongoDB
     if (req.method === 'GET' && req.url === '/data') {
+        console.log('[GET /data] Request received');
         try {
             const col = (await getDb()).collection(COLLECTION);
+            console.log('[GET /data] Running findOne...');
             const doc = await col.findOne({ _id: DOC_ID });
             if (!doc) {
+                console.warn('[GET /data] No document found in collection — returning 404');
                 return send(res, 404, { ok: false });
             }
+            console.log('[GET /data] Document found, returning data');
             const { _id, ...data } = doc;
             return send(res, 200, data);
         } catch (e) {
-            console.error('Load error:', e.message);
+            console.error('[GET /data] Error:', e.message);
+            console.error('[GET /data] Stack:', e.stack);
             return send(res, 500, { ok: false, error: e.message });
         }
     }
