@@ -220,12 +220,48 @@ function render() {
     const container = document.getElementById('timelineContainer');
     container.innerHTML = "";
 
+    // Stage tracker bar
+    const trackerEl = document.getElementById('stageTracker');
+    if (stages.length > 0) {
+        const parts = stages.map((s, idx) => {
+            const stObj = S.cardStatuses.find(x => x.n === s.status) || {c:'#a1a1aa'};
+            const color = s.cardColor || stObj.c;
+            const isDone = s.status === 'Completed';
+            const inner = isDone
+                ? `<div class="st-circle st-done" style="background:${color};--st-shadow:${color}55">
+                     <i class="fas fa-check" style="font-size:13px"></i>
+                   </div>`
+                : `<div class="st-circle st-pending" style="--st-border:${color};--st-color:${color};--st-shadow:${color}44">
+                     <span style="font-size:10px;font-weight:800">${idx + 1}</span>
+                   </div>`;
+            const label = (s.title || 'Untitled').slice(0, 12);
+            return `<div class="st-node" onclick="document.getElementById('stage-row-${idx}').scrollIntoView({behavior:'smooth',block:'start'})">
+                <div class="st-circle-wrap" style="--st-ring:${color}">
+                    ${inner}
+                </div>
+                <div class="st-label" title="${s.title||''}">${label}</div>
+            </div>`;
+        }).reduce((acc, node, i) => {
+            acc.push(node);
+            if (i < stages.length - 1) {
+                const lc = stages[i].cardColor   || (S.cardStatuses.find(x => x.n === stages[i].status)  ||{c:'#a1a1aa'}).c;
+                const rc = stages[i+1].cardColor || (S.cardStatuses.find(x => x.n === stages[i+1].status)||{c:'#a1a1aa'}).c;
+                acc.push(`<div class="st-line" style="background:linear-gradient(to right,${lc},${rc})"></div>`);
+            }
+            return acc;
+        }, []);
+        trackerEl.innerHTML = `<div class="stage-tracker"><div class="stage-tracker-inner">${parts.join('')}</div></div>`;
+    } else {
+        trackerEl.innerHTML = '';
+    }
+
     stages.forEach((s, idx) => {
         const isComments = s.cardType === 'comments';
         const totalLogs = isComments ? (s.comments?.length||0) : (s.logs.app.length + s.logs.gateway.length + s.logs.firmware.length);
         const stObj = S.cardStatuses.find(x => x.n === s.status) || {c:'#a1a1aa'};
         const stColor = s.cardColor || stObj.c;
         const row = document.createElement('div');
+        row.id = `stage-row-${idx}`;
         row.className = `stage-row status-${s.status}`;
         row.style.setProperty('--st-color', stColor);
         row.innerHTML = `
@@ -338,11 +374,11 @@ function render() {
                 </div>` : `<div style="padding:0 1rem 0.8rem"><button style="font-size:12px;font-weight:700;color:var(--primary);background:var(--primary-light);cursor:pointer;border:1px dashed var(--primary) !important;padding:7px 16px;border-radius:10px;width:100%" onclick="addKVfocus(${idx})">+ Add Detail</button></div>`}
 
                 <!-- FOOTER ACTIONS -->
-                <div class="card-footer">
+                ${s.cardType !== 'none' ? `<div class="card-footer">
                     <button class="logs-btn" onclick="toggleColl(${idx}, 'logsOpen')">
                         <i class="fas fa-${isComments?'comment-alt':'list-ul'}"></i> ${isComments?'Comments':'View Change Logs'} ${totalLogs > 0 ? `<span style="background:rgba(255,255,255,0.25);padding:1px 6px;border-radius:10px;font-size:10px">${totalLogs}</span>` : ''}
                     </button>
-                </div>
+                </div>` : ''}
 
                 <!-- QA PANEL -->
                 ${s.qaOpen ? `<div class="expand-panel">
@@ -381,7 +417,7 @@ function render() {
                 </div>` : ''}
 
                 <!-- LOGS / COMMENTS PANEL -->
-                ${s.logsOpen ? (isComments ? `<div class="expand-panel">
+                ${s.logsOpen && s.cardType !== 'none' ? (isComments ? `<div class="expand-panel">
                     <div class="expand-panel-hdr">
                         <span>Comments</span>
                         <span style="background:var(--border);padding:1px 8px;border-radius:10px;font-size:10px">${(s.comments||[]).length}</span>
