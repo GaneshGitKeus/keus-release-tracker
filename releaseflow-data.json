@@ -1,0 +1,285 @@
+{
+  "_meta": {
+    "app": "ReleaseFlow Pro",
+    "savedAt": "2026-03-23T14:20:06.042Z",
+    "version": "1"
+  },
+  "months": [
+    {
+      "name": "January 2026",
+      "sub": "Q1"
+    },
+    {
+      "name": "February 2026",
+      "sub": "Q1"
+    },
+    {
+      "name": "March 2026",
+      "sub": "Btea"
+    },
+    {
+      "name": "April 2026",
+      "sub": "Q2"
+    },
+    {
+      "name": "May 2026",
+      "sub": "Q2"
+    },
+    {
+      "name": "June 2026",
+      "sub": "Q2 Release"
+    },
+    {
+      "name": "July 2026",
+      "sub": "Q3"
+    },
+    {
+      "name": "August 2026",
+      "sub": "Q3"
+    },
+    {
+      "name": "September 2026",
+      "sub": "Q3 Release"
+    },
+    {
+      "name": "October 2026",
+      "sub": "Q4"
+    },
+    {
+      "name": "November 2026",
+      "sub": "Q4"
+    },
+    {
+      "name": "December 2026",
+      "sub": "Q4 Release"
+    }
+  ],
+  "data": {
+    "January 2026": {
+      "sub": "Q1",
+      "stages": []
+    },
+    "February 2026": {
+      "sub": "Q1",
+      "stages": [
+        {
+          "title": "New Stage",
+          "label": "Phase",
+          "date": "2026-03-18",
+          "status": "Pending",
+          "cardType": "logs",
+          "cardColor": "",
+          "cardBg": "",
+          "details": [
+            {
+              "k": "regfefge",
+              "v": ""
+            }
+          ],
+          "qa": [
+            {
+              "n": "Approval",
+              "v": "In Review",
+              "d": "2026-03-25"
+            }
+          ],
+          "logs": {
+            "app": [
+              "qewqe"
+            ],
+            "gateway": [
+              "dscds"
+            ],
+            "firmware": [
+              "fgfdgfd"
+            ]
+          },
+          "comments": [],
+          "tags": [
+            {
+              "n": "Alpha",
+              "d": "hjghhjg"
+            }
+          ],
+          "blockedReasons": [],
+          "logsOpen": true,
+          "openCat": "firmware",
+          "qaOpen": true,
+          "qaPickerOpen": -1
+        }
+      ]
+    },
+    "March 2026": {
+      "sub": "Btea",
+      "stages": [
+        {
+          "title": "blok",
+          "label": "blok",
+          "status": "Completed",
+          "details": [
+            {
+              "k": "Key",
+              "v": "Value"
+            },
+            {
+              "k": "Key",
+              "v": "Value"
+            },
+            {
+              "k": "Key",
+              "v": "Value"
+            },
+            {
+              "k": "Key",
+              "v": "Value"
+            }
+          ],
+          "qa": [
+            {
+              "n": "Check",
+              "v": "Failed"
+            },
+            {
+              "n": "Check",
+              "v": "Pending"
+            }
+          ],
+          "logs": {
+            "app": [
+              "fdsf"
+            ],
+            "gateway": [],
+            "firmware": []
+          },
+          "tags": [
+            {
+              "n": "cdsc",
+              "d": "csvds"
+            },
+            {
+              "n": "cdsc",
+              "d": "csvds"
+            },
+            {
+              "n": "cds",
+              "d": "dscvs"
+            }
+          ],
+          "blockedReasons": [],
+          "logsOpen": false,
+          "openCat": "",
+          "blockedOpen": false,
+          "qaOpen": false,
+          "openTagIdx": null
+        },
+        {
+          "title": "Release",
+          "label": "Phase",
+          "status": "Pending",
+          "details": [
+            {
+              "k": "Version",
+              "v": "1.0"
+            }
+          ],
+          "qa": [],
+          "logs": {
+            "app": [],
+            "gateway": [],
+            "firmware": []
+          },
+          "tags": [],
+          "blockedReasons": []
+        }
+      ]
+    },
+    "April 2026": {
+      "sub": "Q2",
+      "stages": []
+    },
+    "May 2026": {
+      "sub": "Q2",
+      "stages": []
+    },
+    "June 2026": {
+      "sub": "Q2 Release",
+      "stages": []
+    },
+    "July 2026": {
+      "sub": "Q3",
+      "stages": []
+    },
+    "August 2026": {
+      "sub": "Q3",
+      "stages": []
+    },
+    "September 2026": {
+      "sub": "Q3 Release",
+      "stages": []
+    },
+    "October 2026": {
+      "sub": "Q4",
+      "stages": []
+    },
+    "November 2026": {
+      "sub": "Q4",
+      "stages": []
+    },
+    "December 2026": {
+      "sub": "Q4 Release",
+      "stages": []
+    }
+  },
+  "cardStatuses": [
+    {
+      "n": "Pending",
+      "c": "#a1a1aa"
+    },
+    {
+      "n": "In Progress",
+      "c": "#f59e0b"
+    },
+    {
+      "n": "Completed",
+      "c": "#16a34a"
+    },
+    {
+      "n": "Blocked",
+      "c": "#dc2626"
+    },
+    {
+      "n": "On Hold",
+      "c": "#8b5cf6"
+    },
+    {
+      "n": "Cancelled",
+      "c": "#64748b"
+    }
+  ],
+  "approvalStatuses": [
+    {
+      "n": "Pending",
+      "c": "#a1a1aa"
+    },
+    {
+      "n": "In Review",
+      "c": "#0ea5e9"
+    },
+    {
+      "n": "Passed",
+      "c": "#16a34a"
+    },
+    {
+      "n": "Approved",
+      "c": "#5c6ac4"
+    },
+    {
+      "n": "Failed",
+      "c": "#dc2626"
+    },
+    {
+      "n": "Waived",
+      "c": "#f59e0b"
+    }
+  ]
+}
