@@ -936,14 +936,58 @@ nav {
 }
 
 /* ── Read mode ── */
-body.read-mode [contenteditable] { pointer-events: none; outline: none; }
-body.read-mode .ghost-del,
-body.read-mode .ghost-type-btn,
-body.read-mode .card-footer .logs-btn,
+/* ── READ MODE: full lockdown ── */
+body.read-mode [contenteditable] { pointer-events: none !important; outline: none !important; cursor: default !important; }
+body.read-mode input,
+body.read-mode textarea,
+body.read-mode select { pointer-events: none !important; cursor: default !important; }
+
+/* hide edit-only controls */
+body.read-mode .card-ghost-actions,
 body.read-mode .tag-btn,
-body.read-mode .qa-btn,
 body.read-mode .btn--primary { display: none !important; }
-body.read-mode .card { cursor: default; }
+
+/* status pill — visible, not clickable, no chevron */
+body.read-mode .spill { pointer-events: none !important; cursor: default !important; }
+body.read-mode .spill .fa-chevron-down { display: none !important; }
+body.read-mode .status-picker { display: none !important; }
+
+/* color dot — hide */
+body.read-mode [onclick*="toggleCardColorPicker"] { display: none !important; }
+
+/* hide add/delete actions inside panels */
+body.read-mode [onclick*="addKVfocus"],
+body.read-mode [onclick*="addQA"],
+body.read-mode [onclick*="quickAddApproval"],
+body.read-mode [onclick*="confirmDelete"],
+body.read-mode [onclick*="addStage"],
+body.read-mode [onclick*="addLog"],
+body.read-mode [onclick*="addVersion"],
+body.read-mode [onclick*="delVersion"],
+body.read-mode [onclick*="addComment"],
+body.read-mode [onclick*="delLog"],
+body.read-mode [onclick*="delList"],
+body.read-mode [onclick*="delComment"],
+body.read-mode [onclick*="delKV"],
+body.read-mode [onclick*="openMdl"],
+body.read-mode [onclick*="addList"],
+body.read-mode .del-confirm-bar { display: none !important; }
+
+/* qa approve status badge — show but not clickable */
+body.read-mode .qa-badge { pointer-events: none !important; cursor: default !important; }
+body.read-mode .qa-badge .fa-chevron-down { display: none !important; }
+
+/* tag pills — show but not clickable */
+body.read-mode .tag-pill { pointer-events: none !important; }
+
+/* spec delete, edit pencil icons — hide */
+body.read-mode .spec-del,
+body.read-mode [onclick*="openTagEdit"] { display: none !important; }
+
+/* disable card interactions */
+body.read-mode .card { cursor: default !important; user-select: text !important; }
+body.read-mode .card-title,
+body.read-mode .card-subtitle { cursor: default !important; }
 
 /* ── Scrollbar (Webkit) ── */
 ::-webkit-scrollbar { width: 5px; }

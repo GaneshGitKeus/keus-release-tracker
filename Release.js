@@ -39,7 +39,7 @@ let tagTarget = null;
 let dirHandle = null;   // File System Access API — directory handle for the project folder
 let fileSaveTimer = null;
 let S_history = [];
-let editMode = true;
+let editMode = false;
 
 /* ── IndexedDB: persist directory handle across page refreshes ── */
 function getDB() {
@@ -131,6 +131,9 @@ async function writeToFile() {
 async function init() {
     S.theme = localStorage.getItem('rf_theme') || 'light';
     applyTheme();
+    document.body.classList.add('read-mode');
+    const btn = document.getElementById('editModeBtn');
+    if (btn) { btn.innerHTML = '<i class="fas fa-lock"></i> Read'; btn.style.color = 'var(--clr-block)'; }
 
     // Try loading from server first
     try {
@@ -727,6 +730,7 @@ function specKeyDown(e, role, i, di) {
 // ── Long-press delete ──
 let _lpTimer = null, _lpCard = null;
 function lpStart(e, card) {
+  if (!editMode) return;
   if (e.target.isContentEditable || e.target.closest('button,input,select,.spill,.qa-btn,.tag-pill,.tag-btn,.logs-btn,.qa-badge,.spec-del,.ghost-del,.tag-popup')) return;
   _lpCard = card;
   _lpTimer = setTimeout(() => {
