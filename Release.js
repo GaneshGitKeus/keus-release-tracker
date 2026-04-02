@@ -38,6 +38,8 @@ function migrateStatus(x) { if (typeof x === 'string') return {n:x, c:ST_CLR[x]|
 let tagTarget = null;
 let dirHandle = null;   // File System Access API — directory handle for the project folder
 let fileSaveTimer = null;
+let S_history = [];
+let editMode = true;
 
 /* ── IndexedDB: persist directory handle across page refreshes ── */
 function getDB() {
@@ -94,9 +96,9 @@ async function readFromFile() {
         const savedActive = localStorage.getItem('rf_activeMonth');
         S.activeMonth = (savedActive && S.data[savedActive]) ? savedActive : S.months[0].name;
         render();
-        showStatus('File loaded \u2713');
+        showStatus('File loaded ✓', 'success');
     } catch(e) {
-        if (e.name !== 'NotFoundError') alert('Could not load data: ' + e.message);
+        if (e.name !== 'NotFoundError') showToast('Could not load data: ' + e.message, 'error');
     }
 }
 
@@ -105,7 +107,7 @@ async function writeToFile() {
     const perm = await dirHandle.queryPermission({ mode: 'readwrite' });
     if (perm !== 'granted') {
         const req = await dirHandle.requestPermission({ mode: 'readwrite' });
-        if (req !== 'granted') { showStatus('Write permission denied'); return; }
+        if (req !== 'granted') { showStatus('Write permission denied', 'error'); return; }
     }
     const payload = {
         _meta: { app: "ReleaseFlow Pro", savedAt: new Date().toISOString(), version: "1" },
@@ -119,9 +121,9 @@ async function writeToFile() {
         const writable = await fh.createWritable();
         await writable.write(JSON.stringify(payload, null, 2));
         await writable.close();
-        showStatus('Saved \u2713');
+        showStatus('Saved ✓', 'success');
     } catch(e) {
-        showStatus('Save failed');
+        showStatus('Save failed', 'error');
     }
 }
 
@@ -180,7 +182,13 @@ function save() {
     fileSaveTimer = setTimeout(() => saveToServer(), 300);
 }
 
+let _skipHistoryPush = false;
 async function saveToServer() {
+    if (!_skipHistoryPush) {
+        S_history.push({ ts: new Date().toISOString(), snapshot: JSON.stringify({data: S.data, months: S.months, cardStatuses: S.cardStatuses, approvalStatuses: S.approvalStatuses}) });
+        if (S_history.length > 20) S_history.shift();
+    }
+    _skipHistoryPush = false;
     const payload = {
         _meta: { app: "ReleaseFlow Pro", savedAt: new Date().toISOString(), version: "1" },
         months: S.months,
@@ -195,8 +203,8 @@ async function saveToServer() {
             body: JSON.stringify(payload)
         });
         const json = await res.json();
-        if (json.ok) showStatus('Saved \u2713');
-        else showStatus('Save failed');
+        if (json.ok) showStatus('Saved ✓', 'success');
+        else showStatus('Save failed', 'error');
     } catch (e) {
         // server not available, silently fall back to localStorage only
     }
@@ -223,20 +231,24 @@ function render() {
     // Stage tracker bar
     const trackerEl = document.getElementById('stageTracker');
     if (stages.length > 0) {
+        const firstPendingIdx = stages.findIndex(s => s.status !== 'Completed');
         const parts = stages.map((s, idx) => {
             const stObj = S.cardStatuses.find(x => x.n === s.status) || {c:'#a1a1aa'};
             const color = s.cardColor || stObj.c;
             const isDone = s.status === 'Completed';
+            const isCurrent = idx === firstPendingIdx;
             const inner = isDone
                 ? `<div class="st-circle st-done" style="background:${color};--st-shadow:${color}55">
                      <i class="fas fa-check" style="font-size:13px"></i>
                    </div>`
                 : `<div class="st-circle st-pending" style="--st-border:${color};--st-color:${color};--st-shadow:${color}44">
-                     <span style="font-size:10px;font-weight:800">${idx + 1}</span>
+                     <span style="font-size:11px;font-weight:800">${idx + 1}</span>
                    </div>`;
-            const label = (s.title || 'Untitled').slice(0, 12);
-            return `<div class="st-node" onclick="document.getElementById('stage-row-${idx}').scrollIntoView({behavior:'smooth',block:'start'})">
-                <div class="st-circle-wrap" style="--st-ring:${color}">
+            const label = s.title || 'Untitled';
+            const currentClass = isCurrent ? ' st-current' : '';
+            const wrapCurrentClass = isCurrent ? ' st-current' : '';
+            return `<div class="st-node${currentClass}" onclick="document.getElementById('stage-row-${idx}').scrollIntoView({behavior:'smooth',block:'start'})">
+                <div class="st-circle-wrap${wrapCurrentClass}" style="--st-ring:${color}">
                     ${inner}
                 </div>
                 <div class="st-label" title="${s.title||''}">${label}</div>
@@ -244,9 +256,15 @@ function render() {
         }).reduce((acc, node, i) => {
             acc.push(node);
             if (i < stages.length - 1) {
+                const leftDone  = stages[i].status === 'Completed';
+                const rightDone = stages[i+1].status === 'Completed';
                 const lc = stages[i].cardColor   || (S.cardStatuses.find(x => x.n === stages[i].status)  ||{c:'#a1a1aa'}).c;
                 const rc = stages[i+1].cardColor || (S.cardStatuses.find(x => x.n === stages[i+1].status)||{c:'#a1a1aa'}).c;
-                acc.push(`<div class="st-line" style="background:linear-gradient(to right,${lc},${rc})"></div>`);
+                if (!leftDone && !rightDone) {
+                    acc.push(`<div class="st-line st-line-pending" style="--st-line-color:${lc}44"></div>`);
+                } else {
+                    acc.push(`<div class="st-line" style="background:linear-gradient(to right,${lc},${rc})"></div>`);
+                }
             }
             return acc;
         }, []);
@@ -255,9 +273,31 @@ function render() {
         trackerEl.innerHTML = '';
     }
 
+    // History panel
+    let historyPanel = document.getElementById('history-panel');
+    if (S.historyOpen) {
+        if (!historyPanel) {
+            historyPanel = document.createElement('div');
+            historyPanel.id = 'history-panel';
+            document.body.appendChild(historyPanel);
+        }
+        historyPanel.style.cssText = 'position:fixed;right:0;top:0;height:100vh;width:280px;z-index:500;background:var(--surface);border-left:1px solid var(--border);overflow-y:auto;padding:16px;box-shadow:-4px 0 20px rgba(0,0,0,.08)';
+        historyPanel.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><span style="font-size:13px;font-weight:700;color:var(--text-main)"><i class="fas fa-history" style="color:var(--primary);margin-right:6px"></i>History</span><button onclick="toggleHistory()" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--text-dim);padding:4px"><i class="fas fa-times"></i></button></div>${S_history.length === 0 ? '<div style="font-size:12px;color:var(--text-dim);text-align:center;padding:20px 0">No history yet</div>' : [...S_history].reverse().map((h, ri) => { const idx = S_history.length - 1 - ri; return `<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 10px;border-radius:8px;margin-bottom:4px;background:var(--surface-2);gap:8px"><div><div style="font-size:11px;font-weight:600;color:var(--text-main)">${new Date(h.ts).toLocaleTimeString()}</div><div style="font-size:10px;color:var(--text-dim)">${new Date(h.ts).toLocaleDateString()}</div></div><button onclick="restoreHistory(${idx})" style="font-size:10px;font-weight:700;color:var(--primary);background:var(--primary-light);border:1px solid rgba(var(--primary-rgb),.25) !important;border-radius:6px;padding:4px 9px;cursor:pointer;font-family:inherit;white-space:nowrap">Restore</button></div>`; }).join('')}`;
+    } else {
+        if (historyPanel) historyPanel.remove();
+    }
+
     stages.forEach((s, idx) => {
+        // Migrate flat string arrays to versioned format
+        ['app','gateway','firmware'].forEach(k => {
+            if (!s.logs[k]) { s.logs[k] = []; return; }
+            if (s.logs[k].length > 0 && typeof s.logs[k][0] === 'string') {
+                s.logs[k] = [{ v: '', items: s.logs[k] }];
+            }
+        });
         const isComments = s.cardType === 'comments';
-        const totalLogs = isComments ? (s.comments?.length||0) : (s.logs.app.length + s.logs.gateway.length + s.logs.firmware.length);
+        const countEntries = k => (s.logs[k]||[]).reduce((sum, vg) => sum + (vg.items?.length||0), 0);
+        const totalLogs = isComments ? (s.comments?.length||0) : (countEntries('app') + countEntries('gateway') + countEntries('firmware'));
         const stObj = S.cardStatuses.find(x => x.n === s.status) || {c:'#a1a1aa'};
         const stColor = s.cardColor || stObj.c;
         const row = document.createElement('div');
@@ -269,7 +309,6 @@ function render() {
             <div class="side-label">${s.title || '—'}</div>
             <div class="dot-wrap"><div class="dot"></div></div>
             <div class="card" onmousedown="lpStart(event,this)" onmouseup="lpEnd()" onmouseleave="lpEnd()" ontouchstart="lpStart(event,this)" ontouchend="lpEnd()" ontouchmove="lpEnd()" style="${s.cardBg ? `background:${s.cardBg}18;` : ''}">
-                <i class="fas fa-trash ghost-del" onclick="confirmDelete(${idx})"></i>
                 ${s.deleteConfirm ? `<div class="del-confirm-bar">
                     <span><i class="fas fa-exclamation-triangle" style="margin-right:6px;font-size:11px"></i>Delete this stage?</span>
                     <div style="display:flex;gap:6px">
@@ -322,6 +361,29 @@ function render() {
                             </div>` : ''}
                           </div>
                         </div>
+                        <div class="card-ghost-actions" style="margin-left:4px">
+                          <div style="position:relative">
+                            <button onclick="event.stopPropagation();toggleCardTypePicker(${idx})" title="Change card type" class="ghost-type-btn">
+                              <i class="fas fa-${s.cardType==='comments'?'comment-alt':s.cardType==='none'?'minus':'list-ul'}"></i>
+                            </button>
+                            ${s.cardTypePickerOpen ? `<div onclick="event.stopPropagation()" style="position:absolute;right:0;top:32px;background:var(--surface);border:1px solid var(--border) !important;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.13);padding:6px;z-index:100;min-width:190px">
+                              <div style="font-size:9.5px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.4px;padding:4px 8px 6px">Card Type</div>
+                              ${[
+                                {type:'logs',     icon:'list-ul',     label:'Change Logs', sub:'App · Gateway · Firmware'},
+                                {type:'comments', icon:'comment-alt', label:'Comments',    sub:'Notes & comment thread'},
+                                {type:'none',     icon:'minus',       label:'None',        sub:'Details & approvals only'}
+                              ].map(opt => `<button onclick="changeCardType(${idx},'${opt.type}')" style="display:flex;align-items:center;gap:9px;width:100%;padding:8px 10px;background:${s.cardType===opt.type?'var(--primary-light)':'none'};border:none !important;border-radius:7px;cursor:pointer;font-family:inherit;text-align:left;transition:background .12s" onmouseenter="if('${s.cardType}'!=='${opt.type}')this.style.background='var(--surface-2)'" onmouseleave="if('${s.cardType}'!=='${opt.type}')this.style.background='none'">
+                                <i class="fas fa-${opt.icon}" style="font-size:12px;color:${s.cardType===opt.type?'var(--primary)':'var(--text-dim)'};width:14px;text-align:center"></i>
+                                <div>
+                                  <div style="font-size:12px;font-weight:700;color:${s.cardType===opt.type?'var(--primary)':'var(--text-main)'}">${opt.label}</div>
+                                  <div style="font-size:10px;color:var(--text-dim);margin-top:1px">${opt.sub}</div>
+                                </div>
+                                ${s.cardType===opt.type?'<i class="fas fa-check" style="margin-left:auto;color:var(--primary);font-size:10px"></i>':''}
+                              </button>`).join('')}
+                            </div>` : ''}
+                          </div>
+                          <button class="ghost-del" onclick="confirmDelete(${idx})" title="Delete stage"><i class="fas fa-trash"></i></button>
+                        </div>
                     </div>
                 </div>
 
@@ -341,7 +403,11 @@ function render() {
                             <span class="tag-popup-close" onclick="toggleTag(${idx})"><i class="fas fa-times"></i></span>
                           </div>
                         </div>
-                        <div style="font-size:12.5px;color:var(--text-muted);font-weight:400;line-height:1.5;white-space:pre-wrap;word-break:break-word">${t.d || '<span style="color:var(--text-dim);font-style:italic">No description</span>'}</div>
+                        ${(()=>{
+                          const raw = (t.d || '').replace(/<[^>]*>/g,'').trim();
+                          if (!raw) return '<span style="color:var(--text-dim);font-style:italic;font-size:12px">No description</span>';
+                          return `<div style="font-size:12.5px;line-height:1.7;white-space:pre-wrap;word-break:break-word;color:${fc||'var(--text-muted)'};">${t.d}</div>`;
+                        })()}
                       </div>` : ''}`;
                     }).join('')}
                     <button class="tag-btn" onclick="openMdl('tagModal', ${idx})">+ Tag</button>
@@ -443,26 +509,43 @@ function render() {
                         <span>Change Logs</span>
                         <span style="background:var(--border);padding:1px 8px;border-radius:10px;font-size:10px">${totalLogs}</span>
                     </div>
-                    ${[{k:'app',l:'App'},{k:'gateway',l:'Gateway'},{k:'firmware',l:'Firmware'}].map(cat=>`
+                    ${[{k:'app',l:'App'},{k:'gateway',l:'Gateway'},{k:'firmware',l:'Firmware'}].map(cat=>{
+                        const versions = s.logs[cat.k] || [];
+                        const catTotal = versions.reduce((sum,vg)=>sum+(vg.items?.length||0),0);
+                        return `
                         <div class="log-cat">
                             <div class="log-hdr" onclick="toggleCat(${idx},'${cat.k}')">
-                                <span>${cat.l} <span style="font-weight:500;color:var(--text-dim)">(${s.logs[cat.k]?.length||0})</span></span>
+                                <span>${cat.l} <span style="font-weight:500;color:var(--text-dim)">(${catTotal})</span></span>
                                 <i class="fas fa-chevron-${s.openCat===cat.k?'up':'down'}" style="font-size:10px;color:var(--text-dim)"></i>
                             </div>
                             ${s.openCat===cat.k?`<div>
-                                ${(s.logs[cat.k]||[]).map((l,li)=>`<div class="log-item">
-                                    <span style="color:var(--primary);font-weight:900;min-width:20px">${li+1}</span>
-                                    <div style="flex:1" contenteditable="true" onblur="updLog(${idx},'${cat.k}',${li},this.innerHTML,this.innerText)">${l}</div>
-                                    <i class="far fa-trash-alt" style="opacity:0.2;cursor:pointer" onclick="delLog(${idx},'${cat.k}',${li})"></i>
-                                  </div>`).join('')}
-                                <div style="padding:6px 12px 10px">
-                                    <div style="display:flex;align-items:center;gap:8px;background:var(--surface-2);border:1px solid var(--border);border-radius:16px;padding:5px 7px 5px 12px;transition:border-color .15s" onfocusin="this.style.borderColor='var(--primary)'" onfocusout="this.style.borderColor='var(--border)'">
-                                        <input id="li-${idx}-${cat.k}" placeholder="Add log entry…" style="flex:1;font-size:11px;background:none;border:none !important;outline:none;font-family:inherit;color:var(--text-main)" onkeypress="if(event.key==='Enter'){addLog(${idx},'${cat.k}',this);event.preventDefault()}">
-                                        <button onclick="addLog(${idx},'${cat.k}',document.getElementById('li-${idx}-${cat.k}'))" style="background:var(--primary);color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="fas fa-plus" style="font-size:9px"></i></button>
+                                ${versions.map((vg,vi)=>`
+                                <div style="margin-bottom:4px;border-bottom:1px solid var(--border)">
+                                    <div style="display:flex;align-items:center;gap:6px;padding:6px 12px;background:var(--surface-2)">
+                                        <i class="fas fa-tag" style="font-size:9px;color:var(--primary);opacity:.7"></i>
+                                        <input value="${vg.v||''}" placeholder="Device"
+                                            style="flex:1;font-size:12px;font-weight:700;color:var(--text-main);background:none;border:none !important;border-bottom:1px dashed var(--border) !important;outline:none;font-family:inherit;padding:1px 0"
+                                            onblur="renameVersion(${idx},'${cat.k}',${vi},this.value)">
+                                        <i class="fas fa-times" title="Remove version" style="font-size:10px;color:var(--text-dim);cursor:pointer;opacity:.35;transition:opacity .12s" onmouseenter="this.style.opacity='.8'" onmouseleave="this.style.opacity='.35'" onclick="delVersion(${idx},'${cat.k}',${vi})"></i>
                                     </div>
+                                    ${(vg.items||[]).map((l,li)=>`<div class="log-item" style="padding-left:28px">
+                                        <span style="color:var(--primary);font-weight:900;min-width:16px;font-size:10px">${li+1}</span>
+                                        <div style="flex:1" contenteditable="true" onblur="updLog(${idx},'${cat.k}',${vi},${li},this.innerHTML,this.innerText)">${l}</div>
+                                        <i class="far fa-trash-alt" style="opacity:0.2;cursor:pointer" onclick="delLog(${idx},'${cat.k}',${vi},${li})"></i>
+                                    </div>`).join('')}
+                                    <div style="padding:4px 12px 8px 28px">
+                                        <div style="display:flex;align-items:center;gap:8px;background:var(--surface-2);border:1px solid var(--border);border-radius:14px;padding:4px 6px 4px 11px;transition:border-color .15s" onfocusin="this.style.borderColor='var(--primary)'" onfocusout="this.style.borderColor='var(--border)'">
+                                            <input id="li-${idx}-${cat.k}-${vi}" placeholder="Add changelog…" style="flex:1;font-size:11px;background:none;border:none !important;outline:none;font-family:inherit;color:var(--text-main)" onkeypress="if(event.key==='Enter'){addLog(${idx},'${cat.k}',${vi},this);event.preventDefault()}">
+                                            <button onclick="addLog(${idx},'${cat.k}',${vi},document.getElementById('li-${idx}-${cat.k}-${vi}'))" style="background:var(--primary);color:#fff;border:none;border-radius:50%;width:20px;height:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="fas fa-plus" style="font-size:8px"></i></button>
+                                        </div>
+                                    </div>
+                                </div>`).join('')}
+                                <div style="padding:6px 12px 10px">
+                                    <button onclick="addVersion(${idx},'${cat.k}')" style="font-size:11px;font-weight:700;color:var(--primary);background:var(--primary-light);border:1px dashed var(--primary) !important;padding:6px 0;border-radius:8px;cursor:pointer;width:100%;font-family:inherit">+ Add Version</button>
                                 </div>
                             </div>`:''}
-                        </div>`).join('')}
+                        </div>`;
+                    }).join('')}
                 </div>`) : ''}
 
             </div>
@@ -503,22 +586,49 @@ function setTagColorPicker(c) {
     if (match) match.classList.add('sel');
   }
 }
+let _savedDescRange = null;
+function saveDescSelection() {
+  const desc = document.getElementById('tDesc');
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount > 0 && desc.contains(sel.anchorNode)) {
+    _savedDescRange = sel.getRangeAt(0).cloneRange();
+  }
+}
 function pickTagTextColor(el) {
   document.querySelectorAll('#tcTextRow .tc').forEach(t => t.classList.remove('sel'));
   el.classList.add('sel');
-  document.getElementById('tTextColor').value = el.dataset.c;
+  const color = el.dataset.c;
+  document.getElementById('tTextColor').value = color;
+  const desc = document.getElementById('tDesc');
+  if (_savedDescRange && !_savedDescRange.collapsed) {
+    desc.focus();
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(_savedDescRange);
+    document.execCommand('foreColor', false, color || '#000000');
+    _savedDescRange = null;
+  } else {
+    desc.style.color = color || '';
+  }
 }
 function setTagTextColorPicker(c) {
   document.querySelectorAll('#tcTextRow .tc').forEach(t => t.classList.remove('sel'));
   document.getElementById('tTextColor').value = c || '';
+  document.getElementById('tDesc').style.color = c || '';
   const match = document.querySelector(c ? `#tcTextRow .tc[data-c="${c}"]` : '#tcTextRow .tc[data-c=""]');
   if (match) match.classList.add('sel');
+}
+function descKeydown(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    document.execCommand('insertHTML', false, '<br>• ');
+  }
 }
 function openTagEdit(i, ti) {
   const tag = S.data[S.activeMonth].stages[i].tags[ti];
   tagTarget = i; tagEditIdx = ti;
   document.getElementById('tName').value = tag.n;
-  document.getElementById('tDesc').value = tag.d || '';
+  document.getElementById('tDesc').innerHTML = tag.d || '• ';
   setTagColorPicker(tag.c || '');
   setTagTextColorPicker(tag.fc || '');
   document.getElementById('tagModalTitle').textContent = 'Edit Tag';
@@ -532,7 +642,7 @@ function openTagEdit(i, ti) {
   document.getElementById('tagModal').style.display = 'flex';
 }
 function saveTag() {
-  const n = document.getElementById('tName').value.trim(), d = document.getElementById('tDesc').value.trim(), c = document.getElementById('tColor').value, fc = document.getElementById('tTextColor').value;
+  const n = document.getElementById('tName').value.trim(), d = document.getElementById('tDesc').innerHTML.trim(), c = document.getElementById('tColor').value, fc = document.getElementById('tTextColor').value;
   if (!n) return;
   if (!S.data[S.activeMonth].stages[tagTarget].tags) S.data[S.activeMonth].stages[tagTarget].tags = [];
   const snNum = parseInt(document.getElementById('tSnNum').textContent) || null;
@@ -556,13 +666,22 @@ function delTagEdit() {
   tagEditIdx = null;
   save(); render(); closeMdl('tagModal');
 }
-function addStage() { document.getElementById('newStageModal').style.display = 'flex'; }
+function addStage() {
+  const modal = document.getElementById('newStageModal');
+  modal.style.display = 'flex';
+  setTimeout(() => document.getElementById('newStageName').focus(), 80);
+}
 function createStage(type) {
-  S.data[S.activeMonth].stages.push({ title: "New Stage", label: "Phase", date: "", status: "Pending",
+  const nameEl = document.getElementById('newStageName');
+  const title = (nameEl.value || '').trim() || 'New Stage';
+  nameEl.value = '';
+  S.data[S.activeMonth].stages.push({ title, label: "Phase", date: "", status: "Pending",
     cardType: type, cardColor: '', cardBg: '',
     details: [], qa: [], logs: {app:[], gateway:[], firmware:[]},
     comments: [], tags: [], blockedReasons: [] });
   save(); render(); closeMdl('newStageModal');
+  const idx = S.data[S.activeMonth].stages.length - 1;
+  setTimeout(() => document.getElementById('stage-row-' + idx)?.scrollIntoView({behavior:'smooth', block:'center'}), 80);
 }
 function addComment(i, input) {
   if (!input.value.trim()) return;
@@ -574,6 +693,8 @@ function addComment(i, input) {
 function delComment(i, ci) { S.data[S.activeMonth].stages[i].comments.splice(ci, 1); save(); render(); }
 function updComment(i, ci, el) { const v = el.innerHTML.trim(); if (el.innerText.trim()) { S.data[S.activeMonth].stages[i].comments[ci].text = v; save(); } else { el.innerHTML = S.data[S.activeMonth].stages[i].comments[ci].text; } el.style.background=''; el.style.boxShadow=''; }
 function setCardBg(i, c) { S.data[S.activeMonth].stages[i].cardBg = c; S.data[S.activeMonth].stages[i].cardColorPickerOpen = false; save(); render(); }
+function toggleCardTypePicker(i) { const s = S.data[S.activeMonth].stages[i]; s.cardTypePickerOpen = !s.cardTypePickerOpen; render(); }
+function changeCardType(i, type) { S.data[S.activeMonth].stages[i].cardType = type; S.data[S.activeMonth].stages[i].cardTypePickerOpen = false; save(); render(); }
 function updDate(i, v) { S.data[S.activeMonth].stages[i].date = v; save(); }
 function confirmDelete(i) { S.data[S.activeMonth].stages[i].deleteConfirm = true; render(); }
 function cancelDelete(i) { S.data[S.activeMonth].stages[i].deleteConfirm = false; render(); }
@@ -666,9 +787,12 @@ function saveNewStatus() {
 function updQA(i, qi, f, v) { S.data[S.activeMonth].stages[i].qa[qi][f] = typeof v === 'string' ? v.trim() : v; save(); render(); }
 function addQA(i) { S.data[S.activeMonth].stages[i].qa.push({n:"Approval", v:"Pending", d:""}); render(); }
 function quickAddApproval(i) { S.data[S.activeMonth].stages[i].qa.push({n:"Approval", v:"Pending", d:""}); S.data[S.activeMonth].stages[i].qaOpen = true; save(); render(); }
-function addLog(i, c, input) { if(!input.value.trim()) return; S.data[S.activeMonth].stages[i].logs[c].push(input.value.trim()); input.value=""; save(); render(); }
-function updLog(i, c, li, html, text) { if (text?.trim()) { S.data[S.activeMonth].stages[i].logs[c][li] = html; save(); } }
-function delLog(i, c, li) { S.data[S.activeMonth].stages[i].logs[c].splice(li, 1); save(); render(); }
+function addLog(i, c, vi, input) { if(!input.value.trim()) return; const vg = S.data[S.activeMonth].stages[i].logs[c][vi]; if(!vg.items) vg.items=[]; vg.items.push(input.value.trim()); input.value=""; save(); render(); }
+function updLog(i, c, vi, li, html, text) { if (text?.trim()) { S.data[S.activeMonth].stages[i].logs[c][vi].items[li] = html; save(); } }
+function delLog(i, c, vi, li) { S.data[S.activeMonth].stages[i].logs[c][vi].items.splice(li, 1); save(); render(); }
+function addVersion(i, c) { S.data[S.activeMonth].stages[i].logs[c].push({v:'', items:[]}); save(); render(); setTimeout(()=>{ const vers=S.data[S.activeMonth].stages[i].logs[c]; const vi=vers.length-1; document.querySelector(`#stage-row-${i} input[id^="li-${i}-${c}-"]`)?.closest('.log-cat')?.querySelectorAll('input[placeholder="Device"]')[vi]?.focus(); },80); }
+function delVersion(i, c, vi) { showConfirm('Remove this version and all its entries?', () => { S.data[S.activeMonth].stages[i].logs[c].splice(vi,1); save(); render(); }); }
+function renameVersion(i, c, vi, val) { S.data[S.activeMonth].stages[i].logs[c][vi].v = val.trim(); save(); }
 function addList(i, f, input) { if(!input.value.trim()) return; S.data[S.activeMonth].stages[i][f].push(input.value.trim()); input.value=""; save(); render(); }
 function delList(i, f, li) { S.data[S.activeMonth].stages[i][f].splice(li, 1); save(); render(); }
 function updList(i, f, li, v) { S.data[S.activeMonth].stages[i][f][li] = v; save(); }
@@ -677,7 +801,7 @@ function openMdl(id, i) {
   if (id === 'tagModal') {
     tagEditIdx = null;
     document.getElementById('tName').value = '';
-    document.getElementById('tDesc').value = '';
+    document.getElementById('tDesc').innerHTML = '• ';
     setTagColorPicker('');
     setTagTextColorPicker('');
     document.getElementById('tagModalTitle').textContent = 'Add Tag';
@@ -709,21 +833,134 @@ function closeMdl(id) { document.getElementById(id).style.display = 'none'; }
 function toggleTheme() { S.theme = S.theme === 'light' ? 'dark' : 'light'; applyTheme(); localStorage.setItem('rf_theme', S.theme); render(); }
 function applyTheme() { document.documentElement.setAttribute('data-theme', S.theme); }
 
-function showStatus(msg) {
-    const el = document.getElementById('saveStatus');
-    el.textContent = msg;
-    el.style.display = 'inline';
-    clearTimeout(el._t);
-    el._t = setTimeout(() => el.style.display = 'none', 2500);
+function showStatus(msg, type) { showToast(msg, type); }
+function showToast(msg, type = 'info', actions = null, duration = 3000) {
+    const icons = { info: 'fa-info-circle', success: 'fa-check-circle', error: 'fa-times-circle', warning: 'fa-exclamation-triangle' };
+    const container = document.getElementById('toast-container');
+    const el = document.createElement('div');
+    el.className = `toast toast-${type}`;
+    el.innerHTML = `<i class="fas ${icons[type]||icons.info} toast-icon"></i><span style="flex:1">${msg}</span>${actions ? `<div class="toast-actions">${actions.map(a=>`<button class="toast-action-btn" data-action="${a.label}">${a.label}</button>`).join('')}</div>` : ''}`;
+    if (actions) {
+        actions.forEach(a => el.querySelector(`[data-action="${a.label}"]`).addEventListener('click', () => { a.cb(); removeToast(el); }));
+    }
+    container.appendChild(el);
+    const t = duration > 0 ? setTimeout(() => removeToast(el), duration) : null;
+    el.addEventListener('click', () => { if (!actions) { clearTimeout(t); removeToast(el); } });
+    return el;
+}
+function removeToast(el) {
+    el.classList.add('removing');
+    el.addEventListener('animationend', () => el.remove(), { once: true });
+}
+function showConfirm(msg, onConfirm) {
+    showToast(msg, 'warning', [
+        { label: 'Cancel', cb: () => {} },
+        { label: 'Confirm', cb: onConfirm }
+    ], 0);
+}
+
+/* --- HISTORY --- */
+function toggleHistory() { S.historyOpen = !S.historyOpen; render(); }
+function restoreHistory(idx) {
+    const h = S_history[idx];
+    if (!h) return;
+    // Snapshot current state so we can undo
+    const undoSnapshot = JSON.stringify({data: S.data, months: S.months, cardStatuses: S.cardStatuses, approvalStatuses: S.approvalStatuses});
+    const p = JSON.parse(h.snapshot);
+    S.data = p.data; S.months = p.months; S.cardStatuses = p.cardStatuses; S.approvalStatuses = p.approvalStatuses;
+    S.historyOpen = false;
+    localStorage.setItem('rf_compact_v1', JSON.stringify(S.data));
+    localStorage.setItem('rf_statuses', JSON.stringify({card: S.cardStatuses, approval: S.approvalStatuses}));
+    _skipHistoryPush = true;
+    saveToServer();
+    render();
+    const time = new Date(h.ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    showToast('Restored to ' + time, 'success', [{
+        label: 'Undo',
+        cb: () => {
+            const prev = JSON.parse(undoSnapshot);
+            S.data = prev.data; S.months = prev.months; S.cardStatuses = prev.cardStatuses; S.approvalStatuses = prev.approvalStatuses;
+            localStorage.setItem('rf_compact_v1', JSON.stringify(S.data));
+            localStorage.setItem('rf_statuses', JSON.stringify({card: S.cardStatuses, approval: S.approvalStatuses}));
+            _skipHistoryPush = true;
+            saveToServer();
+            render();
+            showToast('Restore undone', 'info');
+        }
+    }], 5000);
+}
+
+/* --- EDIT MODE --- */
+function toggleEditMode() {
+    const btn = document.getElementById('editModeBtn');
+    if (editMode) {
+        editMode = false;
+        document.body.classList.add('read-mode');
+        if (btn) { btn.innerHTML = '<i class="fas fa-lock"></i> Read'; btn.style.color = 'var(--clr-block)'; }
+        showToast('Read mode — view only', 'info');
+    } else {
+        const modal = document.getElementById('pwModal');
+        const input = document.getElementById('pwInput');
+        const err = document.getElementById('pwError');
+        input.value = '';
+        input.type = 'password';
+        input.querySelector && (input.querySelector('i') || null);
+        err.style.display = 'none';
+        modal.style.display = 'flex';
+        setTimeout(() => input.focus(), 80);
+    }
+}
+function submitPassword() {
+    const pw = document.getElementById('pwInput').value;
+    const err = document.getElementById('pwError');
+    const btn = document.getElementById('editModeBtn');
+    if (pw === '912211') {
+        closePwModal();
+        editMode = true;
+        document.body.classList.remove('read-mode');
+        if (btn) { btn.innerHTML = '<i class="fas fa-lock-open"></i> Edit'; btn.style.color = ''; }
+        showToast('Edit mode unlocked ✓', 'success');
+    } else {
+        err.style.display = 'block';
+        const input = document.getElementById('pwInput');
+        input.style.borderColor = '#dc2626';
+        input.style.animation = 'none';
+        setTimeout(() => { input.style.animation = 'pw-shake .3s ease'; }, 10);
+        setTimeout(() => { input.style.borderColor = 'var(--border)'; input.style.animation = ''; }, 600);
+        input.select();
+    }
+}
+function closePwModal() {
+    document.getElementById('pwModal').style.display = 'none';
+    document.getElementById('pwInput').value = '';
+    document.getElementById('pwError').style.display = 'none';
 }
 
 /* --- EXPORT / IMPORT --- */
 function exportJSON() {
-    const payload = { _meta: { app: "ReleaseFlow Pro", exportedAt: new Date().toISOString(), version: "1" }, months: S.months, data: S.data };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'releaseflow-data.json'; a.click();
-    URL.revokeObjectURL(url); showStatus('Exported \u2713');
+    const wb = XLSX.utils.book_new();
+    S.months.forEach(m => {
+        const stages = S.data[m.name]?.stages || [];
+        const rows = [['Stage','Status','Date','Label','Details','QA Approvals','Card Type']];
+        stages.forEach(s => {
+            const details = (s.details||[]).map(d=>`${d.k}: ${d.v}`).join('; ');
+            const qa = (s.qa||[]).map(q=>`${q.n}: ${q.v}`).join('; ');
+            rows.push([s.title||'', s.status||'', s.date||'', s.label||'', details, qa, s.cardType||'']);
+        });
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        // Column widths
+        ws['!cols'] = [20,12,12,14,40,30,12].map(w=>({wch:w}));
+        // Bold header row
+        const range = XLSX.utils.decode_range(ws['!ref']);
+        for (let C = range.s.c; C <= range.e.c; C++) {
+            const cell = ws[XLSX.utils.encode_cell({r:0,c:C})];
+            if (cell) { cell.s = { font: { bold: true }, fill: { fgColor: { rgb: 'E8F0FE' } } }; }
+        }
+        const sheetName = m.name.replace(/[:\\\/\?\*\[\]]/g,'').slice(0,31);
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    });
+    XLSX.writeFile(wb, 'releaseflow-export.xlsx');
+    showStatus('Exported ✓', 'success');
 }
 function importJSON() {
     if (window.showOpenFilePicker) { connectFile(); }
@@ -733,7 +970,7 @@ function importJSON() {
 /* --- GENERATE view.html --- */
 async function generateViewer() {
     if (!dirHandle) {
-        showStatus('Click Import first to connect your project folder');
+        showStatus('Click Import first to connect your project folder', 'warning');
         return;
     }
     const html = buildViewerHTML();
@@ -744,7 +981,7 @@ async function generateViewer() {
         await w.write(html);
         await w.close();
     } catch(e) {
-        showStatus('Save failed');
+        showStatus('Save failed', 'error');
         return;
     }
     // Open in new tab
@@ -752,7 +989,7 @@ async function generateViewer() {
     const url = URL.createObjectURL(blob);
     window.open(url, '_blank');
     setTimeout(() => URL.revokeObjectURL(url), 5000);
-    showStatus('Saved & opened \u2713');
+    showStatus('Saved & opened ✓', 'success');
 }
 
 function buildViewerHTML() {
@@ -899,8 +1136,8 @@ function loadJSONFile(input) {
             Object.assign(S.data, incoming);
             S.months.forEach(m => { if (!S.data[m.name]) S.data[m.name] = { sub: m.sub, stages: [] }; });
             save(); render();
-            showStatus('Loaded \u2713');
-        } catch(err) { alert('Invalid JSON file.'); }
+            showStatus('Loaded ✓', 'success');
+        } catch(err) { showToast('Invalid JSON file.', 'error'); }
     };
     reader.readAsText(file);
 }

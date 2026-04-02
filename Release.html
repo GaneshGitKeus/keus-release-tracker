@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ReleaseFlow Pro</title>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800;14..32,900&display=swap');
 
@@ -199,12 +200,49 @@ nav {
   display: flex; align-items: center; gap: 5px;
   justify-content: flex-end;
 }
-#saveStatus {
-  display: none; align-items: center;
-  height: 28px; padding: 0 10px;
-  border-radius: 20px; border: 1px solid var(--border) !important;
-  background: var(--surface-2);
-  font-size: 11px; font-weight: 500; color: var(--text-dim);
+#saveStatus { display: none; }
+#toast-container {
+  position: fixed; bottom: 24px; right: 24px;
+  z-index: 9999; display: flex; flex-direction: column; gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: 10px;
+  font-size: 12.5px; font-weight: 600; font-family: 'Inter', sans-serif;
+  box-shadow: 0 4px 20px rgba(0,0,0,.14);
+  pointer-events: all; cursor: default;
+  animation: toast-in .22s cubic-bezier(.34,1.56,.64,1);
+  max-width: 320px; line-height: 1.4;
+  border: 1px solid transparent !important;
+}
+.toast.removing { animation: toast-out .18s ease forwards; }
+.toast-info    { background: var(--surface); color: var(--text-main); border-color: var(--border) !important; }
+.toast-success { background: #f0fdf4; color: #15803d; border-color: #bbf7d0 !important; }
+.toast-error   { background: #fef2f2; color: #dc2626; border-color: #fca5a5 !important; }
+.toast-warning { background: #fffbeb; color: #b45309; border-color: #fde68a !important; }
+.toast-icon    { font-size: 13px; flex-shrink: 0; }
+.toast-actions { display: flex; gap: 8px; margin-left: auto; padding-left: 10px; flex-shrink: 0; }
+.toast-action-btn {
+  font-size: 11px; font-weight: 700; cursor: pointer;
+  padding: 3px 9px; border-radius: 6px; font-family: inherit;
+  background: rgba(0,0,0,.07); border: none !important; color: inherit;
+  transition: background .12s;
+}
+.toast-action-btn:hover { background: rgba(0,0,0,.14); }
+@keyframes pw-shake {
+  0%,100% { transform: translateX(0); }
+  20%      { transform: translateX(-6px); }
+  40%      { transform: translateX(6px); }
+  60%      { transform: translateX(-4px); }
+  80%      { transform: translateX(4px); }
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(10px) scale(.95); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes toast-out {
+  to { opacity: 0; transform: translateY(6px) scale(.95); }
 }
 .nav-sep { width: 1px; height: 20px; background: var(--border); margin: 0 3px; flex-shrink: 0; }
 
@@ -261,7 +299,7 @@ nav {
    ║  TIMELINE                             ║
    ╚═══════════════════════════════════════╝ */
 .stage-tracker {
-  max-width: 660px;
+  max-width: 820px;
   margin: 1.25rem auto 0;
   padding: 0 2rem;
   overflow-x: auto;
@@ -272,47 +310,63 @@ nav {
   display: flex;
   align-items: flex-start;
   min-width: max-content;
-  padding: 4px 0 10px;
+  padding: 6px 0 12px;
 }
 .st-node {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   cursor: pointer;
 }
 .st-circle-wrap {
   position: relative;
-  width: 36px; height: 36px;
+  width: 40px; height: 40px;
   flex-shrink: 0;
 }
-/* outer ring */
+/* outer hover ring */
 .st-circle-wrap::before {
   content: '';
   position: absolute;
-  inset: -4px;
+  inset: -5px;
   border-radius: 50%;
   border: 2px solid var(--st-ring, transparent);
   opacity: 0;
   transition: opacity .2s, inset .2s;
 }
 .st-node:hover .st-circle-wrap::before {
-  opacity: 1;
-  inset: -5px;
+  opacity: .7;
+  inset: -6px;
+}
+/* current stage pulse ring */
+@keyframes st-pulse {
+  0%   { transform: scale(1);    opacity: .8; }
+  70%  { transform: scale(1.7);  opacity: 0; }
+  100% { transform: scale(1.7);  opacity: 0; }
+}
+.st-circle-wrap.st-current::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2.5px solid var(--st-ring, #aaa);
+  animation: st-pulse 2s ease-out infinite;
+  pointer-events: none;
+  transform-origin: center center;
 }
 .st-circle {
-  width: 36px; height: 36px;
+  width: 40px; height: 40px;
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-size: 12px; font-weight: 800;
+  font-size: 13px; font-weight: 800;
   transition: transform .18s cubic-bezier(.34,1.56,.64,1), box-shadow .18s;
   position: relative;
   z-index: 1;
 }
-/* completed — solid fill, white icon */
+/* completed — solid fill, white check, strong glow */
 .st-circle.st-done {
   color: #fff;
-  box-shadow: 0 2px 8px var(--st-shadow, rgba(0,0,0,.18));
+  box-shadow: 0 3px 10px var(--st-shadow, rgba(0,0,0,.22)), 0 1px 3px rgba(0,0,0,.12);
 }
 /* pending/other — surface bg, colored number + border */
 .st-circle.st-pending {
@@ -321,26 +375,41 @@ nav {
   color: var(--st-color, #888);
   box-shadow: 0 1px 4px rgba(0,0,0,.07);
 }
+/* current (first non-done) — slightly brighter border */
+.st-node.st-current .st-circle.st-pending {
+  border-width: 2.5px;
+  box-shadow: 0 2px 10px var(--st-shadow, rgba(0,0,0,.15));
+}
 .st-node:hover .st-circle {
-  transform: scale(1.16) translateY(-1px);
-  box-shadow: 0 6px 18px var(--st-shadow, rgba(0,0,0,.18));
+  transform: scale(1.14) translateY(-1px);
+  box-shadow: 0 7px 20px var(--st-shadow, rgba(0,0,0,.2));
 }
 .st-label {
-  font-size: 8.5px; font-weight: 700;
+  font-size: 9px; font-weight: 700;
   color: var(--text-dim);
-  max-width: 56px;
+  max-width: 72px;
   text-align: center;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  text-transform: uppercase; letter-spacing: .35px;
+  white-space: normal;
+  word-break: break-word;
+  text-transform: uppercase; letter-spacing: .4px;
   transition: color .15s;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
+.st-node.st-current .st-label { color: var(--st-color, var(--text-muted)); font-weight: 800; }
 .st-node:hover .st-label { color: var(--text-muted); }
+/* solid line for completed segments */
 .st-line {
   height: 3px;
-  flex: 1; min-width: 16px;
+  flex: 1; min-width: 18px;
   border-radius: 99px;
-  margin-top: 17px;
+  margin-top: 18px;
   position: relative;
+  transition: opacity .2s;
 }
 .st-line::after {
   content: '';
@@ -348,10 +417,19 @@ nav {
   inset: 0;
   border-radius: 99px;
   background: inherit;
-  filter: blur(2px);
-  opacity: .35;
-  transform: scaleY(2.5);
+  filter: blur(3px);
+  opacity: .3;
+  transform: scaleY(3);
 }
+/* dashed line for pending segments */
+.st-line.st-line-pending {
+  background: none !important;
+  height: 0;
+  border-top: 2.5px dashed var(--st-line-color, #d1d5db);
+  border-radius: 0;
+  margin-top: 19px;
+}
+.st-line.st-line-pending::after { display: none; }
 
 .main-wrap {
   max-width: 660px;
@@ -417,16 +495,29 @@ nav {
 .stage-row .card { border-left-color: var(--st-color, var(--border-2)) !important; }
 
 /* Ghost delete */
+.card-ghost-actions {
+  display: flex; align-items: center; gap: 4px;
+  flex-shrink: 0;
+}
 .ghost-del {
-  position: absolute; top: 10px; right: 10px; z-index: 10;
   width: 26px; height: 26px; border-radius: 7px;
   background: transparent; color: transparent;
   display: flex; align-items: center; justify-content: center;
   font-size: 11px; cursor: pointer;
-  transition: background .15s, color .15s, transform .15s;
+  transition: background .15s, color .15s;
+  border: none !important; padding: 0; flex-shrink: 0;
 }
 .card:hover .ghost-del { color: var(--text-dim); background: var(--surface-2); }
 .ghost-del:hover { background: var(--clr-block-bg) !important; color: var(--clr-block) !important; }
+.ghost-type-btn {
+  width: 26px; height: 26px; border-radius: 7px;
+  background: transparent; color: transparent;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; cursor: pointer;
+  transition: background .15s, color .15s;
+  border: none !important; padding: 0; flex-shrink: 0; font-family: inherit;
+}
+.card:hover .ghost-type-btn { color: var(--text-dim); background: var(--surface-2); }
 
 /* Delete confirmation bar */
 .del-confirm-bar {
@@ -464,7 +555,7 @@ nav {
 
 /* ── Card Top ── */
 .card-top {
-  padding: 16px 46px 13px 18px;
+  padding: 16px 16px 13px 18px;
   display: flex; align-items: flex-start;
   justify-content: space-between; gap: 10px;
 }
@@ -757,10 +848,14 @@ nav {
   background: rgba(9,10,18,.55);
   backdrop-filter: blur(12px) saturate(150%);
   -webkit-backdrop-filter: blur(12px) saturate(150%);
-  align-items: center; justify-content: center;
+  align-items: flex-start; justify-content: center;
+  overflow-y: auto; padding: 24px 0;
 }
 .modal-card {
   width: 320px;
+  max-width: 94vw;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -794,6 +889,19 @@ nav {
 .modal-input::placeholder { color: var(--text-dim); }
 .modal-input:focus { border-color: var(--primary) !important; background: var(--surface); }
 .modal-input:last-of-type { margin-bottom: 14px; }
+.modal-card--wide { width: 500px; }
+#tDesc {
+  height: auto; min-height: 160px; padding: 10px 12px;
+  line-height: 1.6; font-size: 13px;
+  outline: none; cursor: text;
+  white-space: pre-wrap; word-break: break-word; overflow-y: auto;
+}
+#tDesc:empty::before {
+  content: attr(data-placeholder);
+  color: var(--text-dim); pointer-events: none;
+}
+.tag-desc-bullets { list-style: none; padding: 0; margin: 0; }
+.tag-desc-bullets li { display: flex; gap: 7px; font-size: 12.5px; line-height: 1.5; font-weight: 600; }
 .modal-save {
   display: flex; align-items: center; justify-content: center;
   width: 100%; height: 38px; border-radius: var(--radius-sm);
@@ -826,6 +934,16 @@ nav {
   from { opacity: 0; transform: scale(.95) translateY(12px); }
   to   { opacity: 1; transform: scale(1)   translateY(0);    }
 }
+
+/* ── Read mode ── */
+body.read-mode [contenteditable] { pointer-events: none; outline: none; }
+body.read-mode .ghost-del,
+body.read-mode .ghost-type-btn,
+body.read-mode .card-footer .logs-btn,
+body.read-mode .tag-btn,
+body.read-mode .qa-btn,
+body.read-mode .btn--primary { display: none !important; }
+body.read-mode .card { cursor: default; }
 
 /* ── Scrollbar (Webkit) ── */
 ::-webkit-scrollbar { width: 5px; }
@@ -877,11 +995,12 @@ nav {
     <button class="btn" onclick="importJSON()" title="Import JSON">
       <i class="fas fa-folder-open"></i> Import
     </button>
-    <button class="btn" onclick="exportJSON()" title="Export JSON" style="color:var(--primary)">
+    <button class="btn" onclick="exportJSON()" title="Export Excel" style="color:var(--primary)">
       <i class="fas fa-download"></i> Export
     </button>
-    <button class="btn" onclick="generateViewer()" title="Generate viewer" style="color:var(--clr-done)">
-      <i class="fas fa-file-export"></i> Generate
+    <button class="btn" onclick="toggleHistory()" title="History"><i class="fas fa-history"></i> History</button>
+    <button class="btn" id="editModeBtn" onclick="toggleEditMode()" title="Toggle edit mode">
+      <i class="fas fa-lock-open"></i> Edit
     </button>
     <div class="nav-sep"></div>
     <button class="btn btn--icon" onclick="toggleTheme()" title="Toggle theme">
@@ -931,7 +1050,7 @@ nav {
 <!-- ░░ TAG MODAL ░░ -->
 <div id="tagModal" class="modal-backdrop"
      onclick="if(event.target===this)closeMdl('tagModal')">
-  <div class="modal-card">
+  <div class="modal-card modal-card--wide">
     <div class="modal-hd">
       <div class="modal-hd-icon"><i class="fas fa-tag"></i></div>
       <h4 id="tagModalTitle">Add Tag</h4>
@@ -940,7 +1059,7 @@ nav {
       <input id="tName" class="modal-input" placeholder="Tag name" style="margin-bottom:0;flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('tDesc').focus()}">
       <div id="tSnBadge" style="display:none;flex-shrink:0;font-size:11px;font-weight:700;color:var(--text-dim);background:var(--surface-2);border:1px solid var(--border) !important;border-radius:6px;padding:4px 9px;white-space:nowrap">#<span id="tSnNum"></span></div>
     </div>
-    <textarea id="tDesc" class="modal-input" placeholder="Description (optional)" rows="4" style="resize:vertical;min-height:80px"></textarea>
+    <div id="tDesc" class="modal-input" contenteditable="true" onkeydown="descKeydown(event)" data-placeholder="Type a point and press Enter…"></div>
     <div style="margin-bottom:12px">
       <div id="tColorLabel" style="font-size:11px;font-weight:600;color:var(--text-dim);margin-bottom:6px;letter-spacing:.3px;transition:color .2s">COLOR</div>
       <div class="tc-row" id="tcRow">
@@ -958,15 +1077,15 @@ nav {
     <div style="margin-bottom:12px">
       <div style="font-size:11px;font-weight:600;color:var(--text-dim);margin-bottom:6px;letter-spacing:.3px">TEXT COLOR</div>
       <div class="tc-row" id="tcTextRow">
-        <div class="tc" style="background:#5c6ac4" onclick="pickTagTextColor(this)" data-c="#5c6ac4"></div>
-        <div class="tc" style="background:#0ea5e9" onclick="pickTagTextColor(this)" data-c="#0ea5e9"></div>
-        <div class="tc" style="background:#10b981" onclick="pickTagTextColor(this)" data-c="#10b981"></div>
-        <div class="tc" style="background:#f59e0b" onclick="pickTagTextColor(this)" data-c="#f59e0b"></div>
-        <div class="tc" style="background:#ef4444" onclick="pickTagTextColor(this)" data-c="#ef4444"></div>
-        <div class="tc" style="background:#8b5cf6" onclick="pickTagTextColor(this)" data-c="#8b5cf6"></div>
-        <div class="tc" style="background:#ec4899" onclick="pickTagTextColor(this)" data-c="#ec4899"></div>
-        <div class="tc" style="background:#64748b" onclick="pickTagTextColor(this)" data-c="#64748b"></div>
-        <div class="tc" style="background:var(--text-main);border:1px solid var(--border) !important" onclick="pickTagTextColor(this)" data-c="" title="Default"></div>
+        <div class="tc" style="background:#5c6ac4" onmousedown="saveDescSelection()" onclick="pickTagTextColor(this)" data-c="#5c6ac4"></div>
+        <div class="tc" style="background:#0ea5e9" onmousedown="saveDescSelection()" onclick="pickTagTextColor(this)" data-c="#0ea5e9"></div>
+        <div class="tc" style="background:#10b981" onmousedown="saveDescSelection()" onclick="pickTagTextColor(this)" data-c="#10b981"></div>
+        <div class="tc" style="background:#f59e0b" onmousedown="saveDescSelection()" onclick="pickTagTextColor(this)" data-c="#f59e0b"></div>
+        <div class="tc" style="background:#ef4444" onmousedown="saveDescSelection()" onclick="pickTagTextColor(this)" data-c="#ef4444"></div>
+        <div class="tc" style="background:#8b5cf6" onmousedown="saveDescSelection()" onclick="pickTagTextColor(this)" data-c="#8b5cf6"></div>
+        <div class="tc" style="background:#ec4899" onmousedown="saveDescSelection()" onclick="pickTagTextColor(this)" data-c="#ec4899"></div>
+        <div class="tc" style="background:#64748b" onmousedown="saveDescSelection()" onclick="pickTagTextColor(this)" data-c="#64748b"></div>
+        <div class="tc" style="background:var(--text-main);border:1px solid var(--border) !important" onmousedown="saveDescSelection()" onclick="pickTagTextColor(this)" data-c="" title="Default"></div>
       </div>
       <input type="hidden" id="tTextColor" value="">
     </div>
@@ -983,22 +1102,23 @@ nav {
       <div class="modal-hd-icon"><i class="fas fa-layer-group"></i></div>
       <h4>New Stage</h4>
     </div>
-    <p style="font-size:12.5px;color:var(--text-muted);margin-bottom:14px">What should this stage track?</p>
-    <button onclick="createStage('logs')" style="display:flex;align-items:center;gap:12px;width:100%;padding:13px 14px;background:var(--surface-2);border:1.5px solid var(--border) !important;border-radius:var(--radius-sm);cursor:pointer;font-family:inherit;margin-bottom:8px;text-align:left;transition:border-color .15s,background .15s" onmouseenter="this.style.background='var(--surface-3)'" onmouseleave="this.style.background='var(--surface-2)'">
+    <input id="newStageName" class="modal-input" placeholder="Stage name (e.g. Beta Deploy)" style="margin-bottom:14px" onkeydown="if(event.key==='Enter')document.querySelector('#newStageModal .st-type-btn')?.click()">
+    <p style="font-size:12px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Card Type</p>
+    <button class="st-type-btn" onclick="createStage('logs')" style="display:flex;align-items:center;gap:12px;width:100%;padding:13px 14px;background:var(--surface-2);border:1.5px solid var(--border) !important;border-radius:var(--radius-sm);cursor:pointer;font-family:inherit;margin-bottom:8px;text-align:left;transition:border-color .15s,background .15s" onmouseenter="this.style.background='var(--surface-3)'" onmouseleave="this.style.background='var(--surface-2)'">
       <div style="width:34px;height:34px;border-radius:9px;background:var(--primary-light);color:var(--primary);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px"><i class="fas fa-list-ul"></i></div>
       <div>
         <div style="font-size:13px;font-weight:700;color:var(--text-main)">Change Logs</div>
         <div style="font-size:11px;color:var(--text-dim);margin-top:1px">App · Gateway · Firmware release notes</div>
       </div>
     </button>
-    <button onclick="createStage('comments')" style="display:flex;align-items:center;gap:12px;width:100%;padding:13px 14px;background:var(--surface-2);border:1.5px solid var(--border) !important;border-radius:var(--radius-sm);cursor:pointer;font-family:inherit;margin-bottom:8px;text-align:left;transition:border-color .15s,background .15s" onmouseenter="this.style.background='var(--surface-3)'" onmouseleave="this.style.background='var(--surface-2)'">
+    <button class="st-type-btn" onclick="createStage('comments')" style="display:flex;align-items:center;gap:12px;width:100%;padding:13px 14px;background:var(--surface-2);border:1.5px solid var(--border) !important;border-radius:var(--radius-sm);cursor:pointer;font-family:inherit;margin-bottom:8px;text-align:left;transition:border-color .15s,background .15s" onmouseenter="this.style.background='var(--surface-3)'" onmouseleave="this.style.background='var(--surface-2)'">
       <div style="width:34px;height:34px;border-radius:9px;background:#f0fdf4;color:#16a34a;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px"><i class="fas fa-comment-alt"></i></div>
       <div>
         <div style="font-size:13px;font-weight:700;color:var(--text-main)">Comments</div>
         <div style="font-size:11px;color:var(--text-dim);margin-top:1px">Simple notes and comment thread</div>
       </div>
     </button>
-    <button onclick="createStage('none')" style="display:flex;align-items:center;gap:12px;width:100%;padding:13px 14px;background:var(--surface-2);border:1.5px solid var(--border) !important;border-radius:var(--radius-sm);cursor:pointer;font-family:inherit;text-align:left;transition:border-color .15s,background .15s" onmouseenter="this.style.background='var(--surface-3)'" onmouseleave="this.style.background='var(--surface-2)'">
+    <button class="st-type-btn" onclick="createStage('none')" style="display:flex;align-items:center;gap:12px;width:100%;padding:13px 14px;background:var(--surface-2);border:1.5px solid var(--border) !important;border-radius:var(--radius-sm);cursor:pointer;font-family:inherit;text-align:left;transition:border-color .15s,background .15s" onmouseenter="this.style.background='var(--surface-3)'" onmouseleave="this.style.background='var(--surface-2)'">
       <div style="width:34px;height:34px;border-radius:9px;background:var(--surface-3);color:var(--text-dim);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px"><i class="fas fa-minus"></i></div>
       <div>
         <div style="font-size:13px;font-weight:700;color:var(--text-main)">None</div>
@@ -1048,5 +1168,38 @@ nav {
 </div>
 
 <script src="Release.js"></script>
+<div id="toast-container"></div>
+
+<!-- ░░ PASSWORD MODAL ░░ -->
+<div id="pwModal" onclick="if(event.target===this)closePwModal()" style="display:none;position:fixed;inset:0;z-index:2000;background:rgba(9,10,18,.6);backdrop-filter:blur(14px) saturate(150%);-webkit-backdrop-filter:blur(14px) saturate(150%);align-items:center;justify-content:center">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:32px 28px;width:340px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.25);animation:modal-in .2s cubic-bezier(.16,1,.3,1)">
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="width:52px;height:52px;border-radius:16px;background:var(--primary-light);color:var(--primary);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:22px">
+        <i class="fas fa-lock"></i>
+      </div>
+      <div style="font-size:17px;font-weight:800;color:var(--text-main);letter-spacing:-.2px">Enter Password</div>
+      <div style="font-size:12.5px;color:var(--text-dim);margin-top:5px">This action requires edit access</div>
+    </div>
+    <div style="position:relative;margin-bottom:8px">
+      <input id="pwInput" type="password" placeholder="Password" autocomplete="off"
+        style="width:100%;height:44px;padding:0 44px 0 14px;border-radius:10px;border:1.5px solid var(--border) !important;background:var(--surface-2);font-size:14px;font-family:inherit;color:var(--text-main);outline:none;box-sizing:border-box;transition:border-color .15s"
+        onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'"
+        onkeydown="if(event.key==='Enter')submitPassword()">
+      <span onclick="const i=document.getElementById('pwInput');i.type=i.type==='password'?'text':'password';this.querySelector('i').className='fas fa-'+(i.type==='password'?'eye':'eye-slash')"
+        style="position:absolute;right:13px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--text-dim);font-size:13px">
+        <i class="fas fa-eye"></i>
+      </span>
+    </div>
+    <div id="pwError" style="font-size:11.5px;color:#dc2626;font-weight:600;min-height:18px;margin-bottom:10px;padding-left:2px;display:none">
+      <i class="fas fa-times-circle" style="margin-right:4px"></i>Incorrect password. Try again.
+    </div>
+    <button onclick="submitPassword()" style="width:100%;height:42px;border-radius:10px;background:var(--primary);color:#fff;font-size:14px;font-weight:700;font-family:inherit;border:none !important;cursor:pointer;transition:opacity .15s" onmouseenter="this.style.opacity='.88'" onmouseleave="this.style.opacity='1'">
+      Unlock Edit Mode
+    </button>
+    <button onclick="closePwModal()" style="width:100%;height:38px;margin-top:8px;border-radius:10px;background:none;color:var(--text-dim);font-size:13px;font-weight:600;font-family:inherit;border:1px solid var(--border) !important;cursor:pointer;transition:background .12s" onmouseenter="this.style.background='var(--surface-2)'" onmouseleave="this.style.background='none'">
+      Cancel
+    </button>
+  </div>
+</div>
 </body>
 </html>
