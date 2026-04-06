@@ -385,6 +385,7 @@ function render() {
                               </button>`).join('')}
                             </div>` : ''}
                           </div>
+                          <button class="drag-handle" onpointerdown="dragStart(event,${idx})" title="Hold and drag to reorder"><i class="fas fa-grip-vertical"></i></button>
                           <button class="ghost-del" onclick="confirmDelete(${idx})" title="Delete stage"><i class="fas fa-trash"></i></button>
                         </div>
                     </div>
@@ -702,6 +703,79 @@ function updDate(i, v) { S.data[S.activeMonth].stages[i].date = v; save(); }
 function confirmDelete(i) { S.data[S.activeMonth].stages[i].deleteConfirm = true; render(); }
 function cancelDelete(i) { S.data[S.activeMonth].stages[i].deleteConfirm = false; render(); }
 function delStage(i) { S.data[S.activeMonth].stages.splice(i, 1); save(); render(); }
+/* ── Drag-to-reorder ── */
+let _drag = null;
+const SCROLL_ZONE = 80;   // px from viewport edge that triggers auto-scroll
+const SCROLL_SPEED = 12;  // px per frame
+
+function dragStart(e, idx) {
+  if (!editMode) return;
+  e.preventDefault(); e.stopPropagation();
+  e.currentTarget.setPointerCapture(e.pointerId);
+  _drag = { from: idx, dropAt: idx, clientY: e.clientY, rafId: null };
+  document.getElementById('stage-row-' + idx).classList.add('is-dragging');
+  document.addEventListener('pointermove', _onDragMove);
+  document.addEventListener('pointerup', _onDragEnd, { once: true });
+  document.addEventListener('pointercancel', _onDragEnd, { once: true });
+  _drag.rafId = requestAnimationFrame(_scrollTick);
+}
+
+function _scrollTick() {
+  if (!_drag) return;
+  const y = _drag.clientY;
+  const vh = window.innerHeight;
+  if (y < SCROLL_ZONE) {
+    const speed = SCROLL_SPEED * (1 - y / SCROLL_ZONE);
+    window.scrollBy(0, -speed);
+    _updateDropIndicator();
+  } else if (y > vh - SCROLL_ZONE) {
+    const speed = SCROLL_SPEED * (1 - (vh - y) / SCROLL_ZONE);
+    window.scrollBy(0, speed);
+    _updateDropIndicator();
+  }
+  _drag.rafId = requestAnimationFrame(_scrollTick);
+}
+
+function _onDragMove(e) {
+  if (!_drag) return;
+  _drag.clientY = e.clientY;
+  _updateDropIndicator();
+}
+
+function _updateDropIndicator() {
+  if (!_drag) return;
+  const rows = [...document.querySelectorAll('#timelineContainer .stage-row')];
+  rows.forEach(r => r.classList.remove('drop-above', 'drop-below'));
+  let dropAt = rows.length;
+  for (let i = 0; i < rows.length; i++) {
+    const rect = rows[i].getBoundingClientRect();
+    if (_drag.clientY < rect.top + rect.height * 0.5) { dropAt = i; break; }
+  }
+  _drag.dropAt = dropAt;
+  if (dropAt < rows.length) {
+    if (dropAt !== _drag.from && dropAt !== _drag.from + 1) rows[dropAt].classList.add('drop-above');
+  } else if (rows.length > 0 && _drag.from !== rows.length - 1) {
+    rows[rows.length - 1].classList.add('drop-below');
+  }
+}
+
+function _onDragEnd() {
+  if (!_drag) return;
+  cancelAnimationFrame(_drag.rafId);
+  document.removeEventListener('pointermove', _onDragMove);
+  document.querySelectorAll('#timelineContainer .stage-row').forEach(r => r.classList.remove('is-dragging', 'drop-above', 'drop-below'));
+  const { from, dropAt } = _drag; _drag = null;
+  if (dropAt !== from && dropAt !== from + 1) {
+    const stages = S.data[S.activeMonth].stages;
+    const [item] = stages.splice(from, 1);
+    const insertAt = dropAt > from ? dropAt - 1 : dropAt;
+    stages.splice(insertAt, 0, item);
+    save(); render();
+    setTimeout(() => document.getElementById('stage-row-' + insertAt)?.scrollIntoView({behavior:'smooth', block:'nearest'}), 60);
+  } else {
+    render();
+  }
+}
 function updKV(i, di, k, v) { S.data[S.activeMonth].stages[i].details[di][k] = v.trim(); save(); }
 function addKV(i) { S.data[S.activeMonth].stages[i].details.push({k:"", v:""}); render(); }
 function addKVfocus(i) {

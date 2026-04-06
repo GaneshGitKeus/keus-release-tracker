@@ -509,6 +509,37 @@ nav {
 }
 .card:hover .ghost-del { color: var(--text-dim); background: var(--surface-2); }
 .ghost-del:hover { background: var(--clr-block-bg) !important; color: var(--clr-block) !important; }
+
+/* Drag handle */
+.drag-handle {
+  width: 26px; height: 26px; border-radius: 7px;
+  background: transparent; color: transparent;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; cursor: grab;
+  transition: background .15s, color .15s;
+  border: none !important; padding: 0; flex-shrink: 0;
+  touch-action: none;
+}
+.card:hover .drag-handle { color: var(--text-dim); background: var(--surface-2); }
+.drag-handle:hover { background: var(--surface-3) !important; color: var(--text-main) !important; }
+.drag-handle:active { cursor: grabbing; }
+
+/* Drag-to-reorder states */
+.stage-row.is-dragging { opacity: .35; }
+.stage-row.is-dragging .card { box-shadow: 0 0 0 2px var(--primary) !important; }
+.stage-row.drop-above::before {
+  content: '';
+  position: absolute; top: -9px; left: 0; right: 0;
+  height: 2px; background: var(--primary); border-radius: 2px; z-index: 10;
+  box-shadow: 0 0 6px rgba(var(--primary-rgb), .55);
+}
+.stage-row.drop-below::after {
+  content: '';
+  position: absolute; bottom: -28px; left: 0; right: 0;
+  height: 2px; background: var(--primary); border-radius: 2px; z-index: 10;
+  box-shadow: 0 0 6px rgba(var(--primary-rgb), .55);
+}
+
 .ghost-type-btn {
   width: 26px; height: 26px; border-radius: 7px;
   background: transparent; color: transparent;
